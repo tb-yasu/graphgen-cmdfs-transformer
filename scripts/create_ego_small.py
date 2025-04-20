@@ -1,0 +1,141 @@
+import networkx as nx
+from typing import List
+
+def create_ego_network(G: nx.Graph, node: int, radius: int = 1) -> nx.Graph:
+    """
+    指定したノードのエゴネットワークを抽出します。
+    
+    Args:
+        G: 元のグラフ
+        node: 中心ノード
+        radius: エゴネットワークの半径（デフォルト=1）
+    
+    Returns:
+        エゴネットワーク
+    """
+    # ノードの近傍を取得
+    ego_nodes = {node}  # 中心ノードを含む
+    current_nodes = {node}
+    
+    # 指定した半径まで探索
+    for _ in range(radius):
+        next_nodes = set()
+        for n in current_nodes:
+            next_nodes.update(G.neighbors(n))
+        ego_nodes.update(next_nodes)
+        current_nodes = next_nodes
+    
+    # サブグラフを抽出
+    return G.subgraph(ego_nodes).copy()
+
+def create_ego_small_dataset(citation_graph: nx.Graph, 
+                           n_samples: int = 200,
+                           min_nodes: int = 4,
+                           max_nodes: int = 18) -> List[nx.Graph]:
+    """
+    Ego-smallデータセットを作成します。
+    
+    Args:
+        citation_graph: Citeseerの引用グラフ
+        n_samples: 抽出するサンプル数
+        min_nodes: 最小ノード数
+        max_nodes: 最大ノード数
+    
+    Returns:
+        エゴネットワークのリスト
+    """
+    ego_graphs = []
+    nodes = list(citation_graph.nodes())
+    np.random.shuffle(nodes)
+    
+    for node in nodes:
+        if len(ego_graphs) >= n_samples:
+            break
+            
+        # エゴネットワークを抽出
+        ego_net = create_ego_network(citation_graph, node, 10)
+        
+        # サイズの条件をチェック
+        n = ego_net.number_of_nodes()
+        if min_nodes <= n <= max_nodes:
+            ego_graphs.append(ego_net)
+    
+    return ego_graphs
+
+# Citeseerデータの処理例
+from scipy import io
+import numpy as np
+
+def load_citeseer():
+    """Citeseerデータセットを読み込みます"""
+    # データのダウンロードと読み込み
+    data = io.loadmat('citeseer.mat')
+    
+    # 論文の引用ネットワークを構築
+    adj_matrix = data['paper_network']
+#    G = nx.from_scipy_sparse_matrix(adj_matrix)
+    G = nx.from_scipy_sparse_array(adj_matrix)  # Use the updated method
+
+    # ネットワークの基本情報を表示
+    print(f"Loaded citation network:")
+    print(f"  Nodes: {G.number_of_nodes()}")
+    print(f"  Edges: {G.number_of_edges()}")
+    
+    return G
+
+def save_graphs_as_gspan(graphs: List[nx.Graph], output_file: str):
+    """
+    グラフ集合をgspanフォーマットで保存します。
+    
+    gspanフォーマット:
+    t # [グラフID]
+    v [ノードID] [ノードラベル]
+    e [ソースノードID] [ターゲットノードID] [エッジラベル]
+    
+    Args:
+        graphs: NetworkXグラフのリスト
+        output_file: 出力ファイルパス
+    """
+    with open(output_file, 'w') as f:
+        for i, G in enumerate(graphs):
+            # グラフヘッダー
+            f.write(f"t # {i}\n")
+            
+            # ノードのIDマッピングを作成（NetworkXのノードIDを連続した整数に変換）
+            node_mapping = {node: idx for idx, node in enumerate(G.nodes())}
+            
+            # ノード情報を出力
+            # この例では全てのノードのラベルを0としています
+            for node in G.nodes():
+                f.write(f"v {node_mapping[node]} 0\n")
+            
+            # エッジ情報を出力
+            # この例では全てのエッジのラベルを0としています
+            for u, v in G.edges():
+                f.write(f"e {node_mapping[u]} {node_mapping[v]} 0\n")
+
+def main():
+    # Citeseerデータセットの読み込み
+    citation_graph = load_citeseer()
+    
+    # Ego-smallデータセットの作成
+    ego_small = create_ego_small_dataset(
+        citation_graph,
+        n_samples=800,
+        min_nodes=50,
+        max_nodes=200
+    )
+    
+    # 基本的な統計情報の表示
+    sizes = [g.number_of_nodes() for g in ego_small]
+    print(f"Created {len(ego_small)} ego networks")
+    print(f"Average size: {np.mean(sizes):.1f} nodes")
+    print(f"Size range: {min(sizes)}-{max(sizes)} nodes")
+    
+    # gspanフォーマットで保存
+    save_graphs_as_gspan(ego_small, "ego_large.gspan")
+    
+    return ego_small
+
+if __name__ == "__main__":
+    ego_small = main()
