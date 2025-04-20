@@ -26,7 +26,6 @@ class PositionalEncoding(nn.Module):
         return x
 
 class TransformerGraphTransformerGenerator(nn.Module):
-    def __init__(self, vocab_size, d_model=256, nhead=8, num_layers=6, nhead=8, dropout=0.2):
     def __init__(self, tokenizer, emb_size, hidden_size, num_layers, nhead=8):
 
         super().__init__()
